@@ -138,6 +138,7 @@ El proyecto está estructurado como un **Monorrepositorio** desacoplado:
     *   **Build Command:** `pip install -r requirements.txt`
     *   **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 3.  En la pestaña **Environment**, agrega las variables de entorno de producción:
+    *   `PYTHON_VERSION` = `3.12.3` *(¡Muy importante para usar paquetes compilados en Render y evitar fallos con SciPy!)*
     *   `ENV` = `production`
     *   `FRONTEND_URL` = `https://tu-frontend.vercel.app` (URL de Vercel una vez creada).
 4.  Presiona **Deploy**. Render te proporcionará tu URL del backend (ej. `https://tu-backend.onrender.com`).

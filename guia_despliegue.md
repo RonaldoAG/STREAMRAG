@@ -41,6 +41,7 @@ Render es una de las plataformas más sencillas y accesibles para alojar aplicac
     *   **Build Command:** `pip install -r requirements.txt`
     *   **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
     *   **Plan:** Selecciona el plan gratuito (*Free*) o el plan básico (*Starter*) para evitar que la API entre en reposo tras periodos de inactividad.
+    *   **Environment Variables:** Agrega la variable `PYTHON_VERSION` con el valor `3.12.3` en la pestaña Environment de Render (esencial para usar paquetes compilados y evitar fallos de compilación con SciPy/NumPy).
 5.  Haz clic en **Create Web Service**.
 
 Una vez completado el despliegue, Render te asignará una URL pública segura como:

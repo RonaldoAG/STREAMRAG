@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STREAMRAG - SaaS Hidrología Dashboard</title>
+  
+  <!-- CDNs: TailwindCSS, React, Babel (para compilar JSX en el navegador), y Plotly -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+
+  <style>
+    /* Estilos para fuentes y scrollbars */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 overflow-hidden">
+  <div id="root"></div>
+
+  <!-- Código React compilado al vuelo por Babel -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+    const API_BASE_URL = "http://localhost:8000/api/v1";
+
+    // --- 1. Componente de Gráficos Plotly para React en Navegador ---
+    function PlotlyChart({ data, layout, config }) {
+      const containerRef = useRef(null);
+
+      useEffect(() => {
+        if (containerRef.current && data.length > 0) {
+          Plotly.react(
+            containerRef.current, 
+            data, 
+            layout, 
+            config || { responsive: true, displayModeBar: false }
+          );
+        }
+      }, [data, layout, config]);
+
+      useEffect(() => {
+        const handleResize = () => {
+          if (containerRef.current) {
+            Plotly.Plots.resize(containerRef.current);
+          }
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+      }, []);
+
+      return <div ref={containerRef} className="w-full h-full min-h-[380px]" />;
+    }
+
+    // --- 2. Módulo de Análisis de Frecuencias (Hito 1) ---
+    const DEFAULT_DATOS = "54.2, 68.5, 47.9, 88.3, 61.0, 72.4, 50.1, 95.6, 42.8, 59.3, 78.1, 65.2, 53.0, 49.7, 83.4, 102.1, 57.6, 66.8, 44.9, 75.0, 60.3, 51.5, 91.2, 70.8, 58.7";
+
+    function FrecuenciaModulo() {
+      const [datosStr, setDatosStr] = useState(DEFAULT_DATOS);
+      const [metodoGumbel, setMetodoGumbel] = useState('momentos');
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [result, setResult] = useState(null);
+
+      const handleExecute = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+
+        const datosArray = datosStr
+          .split(',')
+          .map(v => parseFloat(v.trim()))
+          .filter(v => !isNaN(v));
+
+        if (datosArray.length < 5) {
+          setError("Se requieren al menos 5 datos numéricos válidos separados por comas.");
+          setLoading(false);
+          return;
+        }
+        if (datosArray.some(v => v <= 0)) {
+          setError("Todos los valores de precipitación deben ser mayores a cero.");
+          setLoading(false);
+          return;
+        }
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/hidrologia/analisis-frecuencia`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              datos: datosArray,
+              metodo_gumbel: metodoGumbel,
+              periodos_retorno: [2, 5, 10, 25, 50, 100, 500]
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.detail || "Error en el cálculo del servidor.");
+          setResult(data);
+        } catch (err) {
+          setError(err.message || "No se pudo conectar con el motor de cálculo en localhost:8000.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const getChartData = () => {
+        if (!result) return [];
+        const xTeorico = result.curvas_teoricas.x;
+        return [
+          {
+            x: result.puntos_empiricos.map(p => p.valor),
+            y: result.puntos_empiricos.map(p => p.cdf_empirica),
+            mode: 'markers',
+            type: 'scatter',
+            name: 'Datos Históricos (Weibull)',
+            marker: { color: '#0f172a', size: 8, line: { color: '#ffffff', width: 1 } }
+          },
+          {
+            x: xTeorico,
+            y: result.curvas_teoricas.gumbel.cdf,
+            mode: 'lines',
+            type: 'scatter',
+            name: 'Curva Gumbel Teórica',
+            line: { color: '#2563eb', width: 2.5 }
+          },
+          {
+            x: xTeorico,
+            y: result.curvas_teoricas.log_pearson3.cdf,
+            mode: 'lines',
+            type: 'scatter',
+            name: 'Curva Log-Pearson III',
+            line: { color: '#10b981', width: 2.5, dash: 'dash' }
+          }
+        ];
+      };
+
+      const chartLayout = {
+        title: { text: 'Función de Distribución Acumulada (CDF)', font: { family: 'Inter', size: 15, color: '#1e293b', weight: 'bold' } },
+        xaxis: { title: 'Precipitación Máxima Anual (mm)', gridcolor: '#f1f5f9' },
+        yaxis: { title: 'Probabilidad F(x)', gridcolor: '#f1f5f9', range: [0, 1.05] },
+        legend: { orientation: 'h', y: -0.2, x: 0.5, xanchor: 'center' },
+        margin: { l: 50, r: 15, t: 40, b: 50 },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        hovermode: 'closest'
+      };
+
+      return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fadeIn">
+          {/* Formulario */}
+          <div className="bg-slate-900 text-slate-100 p-6 rounded-2xl shadow-xl flex flex-col justify-between border border-slate-800 h-fit">
+            <form onSubmit={handleExecute} className="space-y-5">
+              <div>
+                <h3 className="text-lg font-bold text-white mb-1">Configuración del Ajuste</h3>
+                <p className="text-xs text-slate-400 text-slate-500">Ingresa la serie de precipitaciones anuales.</p>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Datos (mm)</label>
+                <textarea
+                  value={datosStr}
+                  onChange={(e) => setDatosStr(e.target.value)}
+                  className="w-full h-36 bg-slate-950/60 border border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-200 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Método Gumbel</label>
+                <select
+                  value={metodoGumbel}
+                  onChange={(e) => setMetodoGumbel(e.target.value)}
+                  className="w-full bg-slate-950/60 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="momentos">Método de Momentos (Mom)</option>
+                  <option value="mle">Máxima Verosimilitud (MLE)</option>
+                </select>
+              </div>
+              <button type="submit" disabled={loading} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-md">
+                {loading ? 'Ejecutando Modelos...' : 'Ejecutar Análisis'}
+              </button>
+            </form>
+            {error && (
+              <div className="mt-4 p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-xs flex gap-2">
+                <div className="font-semibold">{error}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Gráfico y Tabla */}
+          <div className="lg:col-span-2 space-y-6">
+            {!result && !loading && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[420px]">
+                <h4 className="text-slate-700 font-bold text-lg">Esperando Entrada de Datos</h4>
+                <p className="text-xs text-slate-400 mt-1">Presiona "Ejecutar Análisis" para realizar los cálculos y graficar.</p>
+              </div>
+            )}
+            {loading && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[420px]">
+                <h4 className="text-slate-700 font-semibold">Corriendo Modelos Numéricos...</h4>
+              </div>
+            )}
+            {result && !loading && (
+              <>
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                  <PlotlyChart data={getChartData()} layout={chartLayout} />
+                </div>
+                
+                {/* Recomendación */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider block">Distribución Recomendada</span>
+                    <h4 className="text-slate-800 font-bold text-base mt-0.5">{result.resumen.distribucion_recomendada}</h4>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl text-right">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">Mínimo KS D</span>
+                    <span className="text-lg font-black text-slate-800">
+                      {result.resumen.distribucion_recomendada === 'Gumbel' 
+                        ? result.gumbel.ks_statistic.toFixed(4)
+                        : result.log_pearson3.ks_statistic.toFixed(4)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Tabla */}
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                  <table className="w-full text-left text-xs text-slate-500">
+                    <thead className="bg-slate-50 text-slate-700 uppercase font-semibold">
+                      <tr>
+                        <th className="px-6 py-3">Periodo T (años)</th>
+                        <th className="px-6 py-3">Gumbel (mm)</th>
+                        <th className="px-6 py-3">Log-Pearson III (mm)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {result.eventos_diseno.map(ev => (
+                        <tr key={ev.periodo_retorno} className="hover:bg-slate-50/40">
+                          <td className="px-6 py-3 font-bold text-slate-800">{ev.periodo_retorno}</td>
+                          <td className="px-6 py-3">{ev.gumbel.toFixed(2)}</td>
+                          <td className="px-6 py-3">{ev.log_pearson3.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // --- 3. Módulo de Hietograma de Diseño (Hito 2) ---
+    function HietogramaModulo() {
+      const [k, setK] = useState(1250.4);
+      const [m, setM] = useState(0.28);
+      const [C, setC] = useState(15.0);
+      const [eta, setEta] = useState(0.72);
+      const [T, setT] = useState(10.0);
+      const [tD, setTD] = useState(120);
+      const [dt, setDt] = useState(10);
+      const [r, setR] = useState(0.35);
+
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [result, setResult] = useState(null);
+
+      const handleGenerate = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+
+        if (tD % dt !== 0) {
+          setError(`La duración total (${tD} min) debe ser un múltiplo exacto del paso (${dt} min).`);
+          setLoading(false);
+          return;
+        }
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/hidrologia/hietograma-diseno`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              k: parseFloat(k), m: parseFloat(m), C: parseFloat(C), eta: parseFloat(eta),
+              T: parseFloat(T), t_d: parseInt(tD), dt: parseInt(dt), r: parseFloat(r)
+            }),
+          });
+
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.detail || "Error al calcular el hietograma.");
+          setResult(data);
+        } catch (err) {
+          setError(err.message || "No se pudo conectar con el motor de cálculo en localhost:8000.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const getChartData = () => {
+        if (!result) return [];
+        const xLabels = result.intervalos.map(i => `${i.tiempo_inicio}-${i.tiempo_fin}`);
+        return [
+          {
+            x: xLabels,
+            y: result.intervalos.map(i => i.precipitacion_incremental),
+            type: 'bar',
+            name: 'Incremental (mm)',
+            marker: { color: '#3b82f6', opacity: 0.7 },
+            yaxis: 'y'
+          },
+          {
+            x: xLabels,
+            y: result.intervalos.map(i => i.precipitacion_acumulada),
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Acumulada (mm)',
+            line: { color: '#ef4444', width: 2.5 },
+            marker: { color: '#ef4444', size: 5 },
+            yaxis: 'y2'
+          }
+        ];
+      };
+
+      const chartLayout = {
+        title: { text: 'Hietograma de Diseño - Método del Bloque Alterno', font: { family: 'Inter', size: 15, color: '#1e293b', weight: 'bold' } },
+        xaxis: { title: 'Intervalos de Duración (minutos)', tickangle: -45 },
+        yaxis: { title: 'Precipitación Incremental (mm)', titlefont: { color: '#3b82f6' }, tickfont: { color: '#3b82f6' }, gridcolor: '#f1f5f9' },
+        yaxis2: { title: 'Precipitación Acumulada (mm)', titlefont: { color: '#ef4444' }, tickfont: { color: '#ef4444' }, overlaying: 'y', side: 'right', gridcolor: 'rgba(0,0,0,0)' },
+        legend: { orientation: 'h', y: -0.3, x: 0.5, xanchor: 'center' },
+        margin: { l: 50, r: 50, t: 40, b: 70 },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        hovermode: 'closest'
+      };
+
+      return (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fadeIn">
+          {/* Formulario */}
+          <div className="bg-slate-900 text-slate-100 p-5 rounded-2xl shadow-xl border border-slate-800 h-fit space-y-4">
+            <form onSubmit={handleGenerate} className="space-y-4">
+              <div>
+                <h3 className="text-base font-bold text-white mb-0.5">Parámetros IDF y Tormenta</h3>
+                <p className="text-[10px] text-slate-500">Define los coeficientes e inicio de tormenta.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Coeficiente k</label>
+                  <input type="number" step="any" value={k} onChange={e => setK(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Exponente m</label>
+                  <input type="number" step="any" value={m} onChange={e => setM(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Constante C (min)</label>
+                  <input type="number" step="any" value={C} onChange={e => setC(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">Exponente eta (η)</label>
+                  <input type="number" step="any" value={eta} onChange={e => setEta(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs font-mono text-slate-200" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 border-t border-slate-800 pt-3">
+                <div>
+                  <label className="text-[8px] font-bold text-slate-400 uppercase block text-center">Retorno (años)</label>
+                  <input type="number" step="any" value={T} onChange={e => setT(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded py-1.5 text-xs text-center text-slate-200" />
+                </div>
+                <div>
+                  <label className="text-[8px] font-bold text-slate-400 uppercase block text-center">Duración td (min)</label>
+                  <input type="number" value={tD} onChange={e => setTD(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded py-1.5 text-xs text-center text-slate-200" />
+                </div>
+                <div>
+                  <label className="text-[8px] font-bold text-slate-400 uppercase block text-center">Paso dt (min)</label>
+                  <input type="number" value={dt} onChange={e => setDt(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded py-1.5 text-xs text-center text-slate-200" />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-800 pt-3 space-y-1">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase">
+                  <span>Asimetría (r)</span>
+                  <span className="text-indigo-400 font-mono">{parseFloat(r).toFixed(2)}</span>
+                </div>
+                <input type="range" min="0.1" max="0.9" step="0.05" value={r} onChange={e => setR(e.target.value)} className="w-full h-1 bg-slate-800 appearance-none cursor-pointer accent-indigo-500 rounded-lg" />
+              </div>
+
+              <button type="submit" disabled={loading} className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-md">
+                {loading ? 'Generando Hietograma...' : 'Generar Tormenta'}
+              </button>
+            </form>
+            {error && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-xs">
+                {error}
+              </div>
+            )}
+          </div>
+
+          {/* Gráfico y Tabla */}
+          <div className="lg:col-span-2 space-y-6">
+            {!result && !loading && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[420px]">
+                <h4 className="text-slate-700 font-bold text-lg">Esperando Configuración de Lluvia</h4>
+                <p className="text-xs text-slate-400 mt-1">Presiona "Generar Tormenta" para trazar el hietograma alterno.</p>
+              </div>
+            )}
+            {loading && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm flex flex-col items-center justify-center min-h-[420px]">
+                <h4 className="text-slate-700 font-semibold">Calculando Bloque Alterno...</h4>
+              </div>
+            )}
+            {result && !loading && (
+              <>
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                  <PlotlyChart data={getChartData()} layout={chartLayout} />
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-center">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">Lluvia Total</span>
+                    <span className="text-base font-extrabold text-slate-800">{result.metadatos.precipitacion_total_mm.toFixed(2)} mm</span>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-center">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block">Intensidad Pico</span>
+                    <span className="text-base font-extrabold text-indigo-600">{result.metadatos.intensidad_pico_mm_h.toFixed(2)} mm/h</span>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-center">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block font-semibold">N° Bloques</span>
+                    <span className="text-base font-extrabold text-slate-800">{result.metadatos.num_bloques}</span>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm text-center">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase block font-semibold">Pico (r)</span>
+                    <span className="text-base font-extrabold text-slate-800">{Math.floor(result.metadatos.factor_asimetria_r * 100)}%</span>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                  <div className="overflow-y-auto max-h-[250px]">
+                    <table className="w-full text-left text-xs text-slate-500">
+                      <thead className="bg-slate-50 text-slate-700 uppercase font-semibold sticky top-0 shadow-sm z-10">
+                        <tr>
+                          <th className="px-6 py-2.5">Bloque (min)</th>
+                          <th className="px-6 py-2.5">Incremental (mm)</th>
+                          <th className="px-6 py-2.5">Acumulado (mm)</th>
+                          <th className="px-6 py-2.5 text-right">Intensidad (mm/h)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {result.intervalos.map((item, idx) => {
+                          const esPico = item.intensidad === result.metadatos.intensidad_pico_mm_h;
+                          return (
+                            <tr key={idx} className={`hover:bg-slate-50/40 ${esPico ? 'bg-indigo-50/20' : ''}`}>
+                              <td className={`px-6 py-2.5 ${esPico ? 'font-bold text-indigo-700' : 'text-slate-800'}`}>
+                                {item.tiempo_inicio} - {item.tiempo_fin}
+                              </td>
+                              <td className="px-6 py-2.5">{item.precipitacion_incremental.toFixed(3)}</td>
+                              <td className="px-6 py-2.5">{item.precipitacion_acumulada.toFixed(3)}</td>
+                              <td className="px-6 py-2.5 text-right font-mono">{item.intensidad.toFixed(2)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // --- 4. Dashboard Contenedor Principal ---
+    function App() {
+      const [activeTab, setActiveTab] = useState('frecuencias');
+
+      return (
+        <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+          {/* Sidebar */}
+          <aside className="w-64 bg-slate-900 text-slate-100 flex flex-col justify-between border-r border-slate-800 shadow-xl z-10">
+            <div>
+              <div className="p-6 border-b border-slate-800 flex items-center gap-3">
+                <div className="bg-indigo-500 p-2 rounded-lg text-white">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="font-bold text-base tracking-wide text-white">STREAMRAG</h1>
+                  <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">SaaS Hidrología</p>
+                </div>
+              </div>
+              <nav className="p-4 space-y-2">
+                <button
+                  onClick={() => setActiveTab('frecuencias')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold uppercase tracking-wide transition-all ${
+                    activeTab === 'frecuencias' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
+                  }`}
+                >
+                  Frecuencias
+                </button>
+                <button
+                  onClick={() => setActiveTab('hietogramas')}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-semibold uppercase tracking-wide transition-all ${
+                    activeTab === 'hietogramas' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25' : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
+                  }`}
+                >
+                  Hietogramas
+                </button>
+              </nav>
+            </div>
+            <div className="p-4 border-t border-slate-800 bg-slate-950/40">
+              <div className="flex items-center justify-between text-[10px] text-slate-500">
+                <span>Engine API</span>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="h-1 w-1 rounded-full bg-emerald-400"></span>Online
+                </span>
+              </div>
+              <p className="text-[9px] text-slate-600 font-mono mt-1 overflow-x-auto whitespace-nowrap">{API_BASE_URL}</p>
+            </div>
+          </aside>
+
+          {/* Área de Contenido */}
+          <main className="flex-1 flex flex-col h-full overflow-hidden">
+            <header className="bg-white border-b border-slate-200 py-4 px-8 flex items-center justify-between shadow-sm z-0">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">
+                  {activeTab === 'frecuencias' ? 'Análisis de Frecuencias de Lluvia' : 'Hietograma de Diseño Pluvial'}
+                </h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  {activeTab === 'frecuencias'
+                    ? 'Ajuste estadístico Gumbel / LP3 con cálculo de cuantiles extremos.'
+                    : 'Tormenta de diseño discreta generada con curvas IDF Sherman y Bloque Alterno.'}
+                </p>
+              </div>
+              <div className="text-[10px] text-slate-400 font-bold uppercase">SaaS Engine v1.0.0</div>
+            </header>
+            <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
+              <div className="max-w-7xl mx-auto">
+                {activeTab === 'frecuencias' ? <FrecuenciaModulo /> : <HietogramaModulo />}
+              </div>
+            </div>
+          </main>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

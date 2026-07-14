@@ -1,0 +1,11 @@
+# Respaldos y Temporales locales
+_backup/
+_backup_SaaS/
+
+# Cachés de herramientas
+.pytest_cache/
+.ruff_cache/
+
+# Archivos de Sistema
+.DS_Store
+Thumbs.db

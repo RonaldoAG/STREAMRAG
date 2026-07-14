@@ -1,0 +1,97 @@
+{
+  "metadatos": {
+    "duracion_total_minutos": 120,
+    "paso_tiempo_minutos": 10,
+    "num_bloques": 12,
+    "periodo_retorno_anos": 10.0,
+    "factor_asimetria_r": 0.35,
+    "precipitacion_total_mm": 139.3922561134417,
+    "intensidad_pico_mm_h": 234.71030552385932
+  },
+  "intervalos": [
+    {
+      "tiempo_inicio": 0,
+      "tiempo_fin": 10,
+      "precipitacion_incremental": 5.599217619768311,
+      "precipitacion_acumulada": 5.599217619768311,
+      "intensidad": 33.595305718609865
+    },
+    {
+      "tiempo_inicio": 10,
+      "tiempo_fin": 20,
+      "precipitacion_incremental": 7.037023578930814,
+      "precipitacion_acumulada": 12.636241198699125,
+      "intensidad": 42.222141473584884
+    },
+    {
+      "tiempo_inicio": 20,
+      "tiempo_fin": 30,
+      "precipitacion_incremental": 9.609278406056134,
+      "precipitacion_acumulada": 22.24551960475526,
+      "intensidad": 57.655670436336806
+    },
+    {
+      "tiempo_inicio": 30,
+      "tiempo_fin": 40,
+      "precipitacion_incremental": 15.456696811592401,
+      "precipitacion_acumulada": 37.70221641634766,
+      "intensidad": 92.74018086955441
+    },
+    {
+      "tiempo_inicio": 40,
+      "tiempo_fin": 50,
+      "precipitacion_incremental": 39.11838425397655,
+      "precipitacion_acumulada": 76.82060067032421,
+      "intensidad": 234.71030552385932
+    },
+    {
+      "tiempo_inicio": 50,
+      "tiempo_fin": 60,
+      "precipitacion_incremental": 22.285906346922715,
+      "precipitacion_acumulada": 99.10650701724693,
+      "intensidad": 133.7154380815363
+    },
+    {
+      "tiempo_inicio": 60,
+      "tiempo_fin": 70,
+      "precipitacion_incremental": 11.833488022806804,
+      "precipitacion_acumulada": 110.93999504005373,
+      "intensidad": 71.00092813684083
+    },
+    {
+      "tiempo_inicio": 70,
+      "tiempo_fin": 80,
+      "precipitacion_incremental": 8.111737689036289,
+      "precipitacion_acumulada": 119.05173272909002,
+      "intensidad": 48.670426134217735
+    },
+    {
+      "tiempo_inicio": 80,
+      "tiempo_fin": 90,
+      "precipitacion_incremental": 6.228897292817322,
+      "precipitacion_acumulada": 125.28063002190734,
+      "intensidad": 37.373383756903934
+    },
+    {
+      "tiempo_inicio": 90,
+      "tiempo_fin": 100,
+      "precipitacion_incremental": 5.094654609076599,
+      "precipitacion_acumulada": 130.37528463098394,
+      "intensidad": 30.567927654459595
+    },
+    {
+      "tiempo_inicio": 100,
+      "tiempo_fin": 110,
+      "precipitacion_incremental": 4.681121971503416,
+      "precipitacion_acumulada": 135.05640660248736,
+      "intensidad": 28.086731829020493
+    },
+    {
+      "tiempo_inicio": 110,
+      "tiempo_fin": 120,
+      "precipitacion_incremental": 4.335849510954347,
+      "precipitacion_acumulada": 139.3922561134417,
+      "intensidad": 26.01509706572608
+    }
+  ]
+}

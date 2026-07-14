@@ -1,0 +1,19 @@
+# Entornos Virtuales
+venv/
+.venv/
+env/
+
+# Python Cache y Bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Pruebas y Cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Variables de Entorno Locales
+.env
+.env.local

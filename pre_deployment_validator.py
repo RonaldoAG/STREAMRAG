@@ -22,7 +22,7 @@ ARCHIVOS_CRITICOS = [
     ("backend/.gitignore", os.path.join(BACKEND_DIR, ".gitignore")),
     ("backend/.env.example", os.path.join(BACKEND_DIR, ".env.example")),
     ("backend/requirements.txt", os.path.join(BACKEND_DIR, "requirements.txt")),
-    ("backend/runtime.txt", os.path.join(BACKEND_DIR, "runtime.txt")),
+    ("backend/.python-version", os.path.join(BACKEND_DIR, ".python-version")),
     ("backend/app/__init__.py", os.path.join(BACKEND_DIR, "app", "__init__.py")),
     ("backend/app/main.py", os.path.join(BACKEND_DIR, "app", "main.py")),
     ("backend/app/config.py", os.path.join(BACKEND_DIR, "app", "config.py")),

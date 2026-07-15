@@ -23,10 +23,12 @@ origins = [
     "http://127.0.0.1:3000"
 ]
 
-# Si estamos en producción y se especifica la URL de producción del Frontend
-if settings.ENV == "production" and settings.FRONTEND_URL:
-    # Agregar el dominio de producción a los orígenes autorizados
-    origins.append(settings.FRONTEND_URL)
+# Si se especifica la URL de producción del Frontend, la agregamos limpiando espacios y barras diagonales
+if settings.FRONTEND_URL:
+    clean_url = settings.FRONTEND_URL.strip().rstrip("/")
+    if clean_url not in origins:
+        origins.append(clean_url)
+
 
 app.add_middleware(
     CORSMiddleware,
